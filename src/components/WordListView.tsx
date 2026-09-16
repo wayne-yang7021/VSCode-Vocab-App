@@ -224,10 +224,9 @@ export const WordListView: React.FC<WordListViewProps> = ({
                       </>
                     )}
 
-                    {/* Word Token (Press and hold mouse to peek) */}
+                    {/* Word Token (Hover or tap to preview definition) */}
                     <span
-                      onMouseDown={() => setPeekingWordId(item.id)}
-                      onMouseUp={() => setPeekingWordId(null)}
+                      onMouseEnter={() => setPeekingWordId(item.id)}
                       onMouseLeave={() => setPeekingWordId(null)}
                       onTouchStart={() => setPeekingWordId(item.id)}
                       onTouchEnd={() => setPeekingWordId(null)}
@@ -236,7 +235,7 @@ export const WordListView: React.FC<WordListViewProps> = ({
                           ? 'bg-[#04395e] border-[#007acc] text-[#4ec9b0] font-bold'
                           : 'bg-[#252526] border-[#383838] text-[#ce9178] hover:border-[#007acc]'
                       }`}
-                      title="按住滑鼠預覽中文釋義"
+                      title="滑鼠移入即可預覽中文釋義"
                     >
                       {isPeeking ? `"${item.word} (${item.paraphrase_pos})"` : `"${item.word}"`}
                     </span>

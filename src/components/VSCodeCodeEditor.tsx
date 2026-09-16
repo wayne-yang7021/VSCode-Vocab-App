@@ -69,16 +69,33 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
   languageMode,
   onOpenLanguageModal,
 }) => {
-  // Whether user is holding down mouse / touch or holding Space
-  const [isHoldingPeek, setIsHoldingPeek] = useState(false);
-  // Whether the user pinned the definition to stay open without holding
+  // Whether user is hovering over the target word or hover tooltip
+  const [isHovered, setIsHovered] = useState(false);
+  // Whether the user is holding Space key
+  const [isHoldingSpace, setIsHoldingSpace] = useState(false);
+  // Whether the user pinned the definition to stay open
   const [isPinned, setIsPinned] = useState(false);
 
   const wordRef = useRef<HTMLSpanElement>(null);
   const langInfo = getLanguageInfo(languageMode);
 
-  // Computed: show definition if holding peek OR pinned
-  const showDefinition = isHoldingPeek || isPinned;
+  // Instant hover handlers - dismissed immediately on mouse leave with 0 delay
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
+  // Reset hover & pin states when word changes
+  useEffect(() => {
+    setIsHovered(false);
+    setIsPinned(false);
+  }, [currentWord?.id]);
+
+  // Computed: show definition if hovering OR holding space OR pinned
+  const showDefinition = isHovered || isHoldingSpace || isPinned;
 
   // Keyboard shortcut listeners
   useEffect(() => {
@@ -90,7 +107,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
       if (e.code === 'Space') {
         e.preventDefault();
-        setIsHoldingPeek(true);
+        setIsHoldingSpace(true);
       } else if (e.code === 'KeyT') {
         // Toggle pin
         e.preventDefault();
@@ -118,7 +135,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
-        setIsHoldingPeek(false);
+        setIsHoldingSpace(false);
       }
     };
 
@@ -267,35 +284,35 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
       </span>
       <span className="text-[#444444]">|</span>
       <span
-        onMouseDown={() => setIsHoldingPeek(true)}
-        onMouseUp={() => setIsHoldingPeek(false)}
-        onTouchStart={() => setIsHoldingPeek(true)}
-        onTouchEnd={() => setIsHoldingPeek(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={() => setIsPinned((prev) => !prev)}
         className="hover:text-[#dcdcaa] cursor-pointer flex items-center gap-1 text-[#cca700] shrink-0"
-        title="按住滑鼠或空白鍵即可查看中文釋義"
+        title="滑鼠懸停或按空白鍵即可查看中文釋義 (點擊釘選)"
       >
         <Eye className="w-3 h-3" />
-        <span>預覽釋義 (Space/Mouse)</span>
+        <span>釋義預覽 (Hover/Space)</span>
       </span>
     </div>
   );
 
   // Render unified Interactive Target Word Token with VS Code inspection popup
   const renderInteractiveWordToken = () => (
-    <div className="relative inline-block">
+    <div
+      className="relative inline-block"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <span
         ref={wordRef}
-        onMouseDown={() => setIsHoldingPeek(true)}
-        onMouseUp={() => setIsHoldingPeek(false)}
-        onMouseLeave={() => !isPinned && setIsHoldingPeek(false)}
-        onTouchStart={() => setIsHoldingPeek(true)}
-        onTouchEnd={() => setIsHoldingPeek(false)}
+        onClick={() => setIsPinned((prev) => !prev)}
+        onTouchStart={() => setIsHovered(true)}
         className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-150 border inline-block select-none ${
           showDefinition
             ? 'bg-[#04395e] border-[#007acc] text-white shadow-lg shadow-[#007acc]/20 scale-[1.02]'
             : 'bg-[#2d2d2d] hover:bg-[#383838] border-[#444444] text-[#ce9178] hover:border-[#007acc]/60'
         }`}
-        title="滑鼠點擊並按住可預覽中文釋義，放開即還原為程式碼"
+        title="滑鼠移入即可預覽中文釋義 (點擊可釘選視窗)"
       >
         {showDefinition ? (
           <span className="text-[#4ec9b0] font-bold">
@@ -311,13 +328,17 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
       {/* VS CODE HOVER INSPECTION TOOLTIP (Rich hover definition clamped within viewport) */}
       {showDefinition && (
         <div
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           style={{
             left: `${popupPos.offsetLeft}px`,
             width: `${popupPos.width}px`,
             maxWidth: 'calc(100vw - 24px)',
           }}
-          className={`absolute z-50 bg-[#252526] border border-[#454545] rounded shadow-2xl p-3 text-xs text-[#cccccc] font-mono-code animate-fadeIn max-h-[85vh] overflow-y-auto ${
-            popupPos.placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+          className={`absolute z-50 bg-[#252526] border border-[#454545] rounded shadow-2xl p-3 text-xs text-[#cccccc] font-mono-code max-h-[85vh] overflow-y-auto ${
+            popupPos.placement === 'top'
+              ? 'bottom-full mb-2 before:absolute before:inset-x-0 before:top-full before:h-2.5 before:content-[""]'
+              : 'top-full mt-2 before:absolute before:inset-x-0 before:bottom-full before:h-2.5 before:content-[""]'
           }`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -394,7 +415,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
           {/* Quick Mastery Buttons inside Tooltip */}
           <div className="pt-2 border-t border-[#333333] flex items-center justify-between gap-2">
             <div className="text-[10px] text-[#858585] truncate">
-              放開即可還原為程式碼
+              {isPinned ? '已釘選顯示 (點擊單字或按 T 取消)' : '移開滑鼠還原 (點擊或按 T 釘選)'}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button
@@ -564,7 +585,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
-                    : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `// 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
@@ -736,7 +757,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
-                    : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `// 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
@@ -892,7 +913,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `# 【釋義】${currentWord.paraphrase_pos}`
-                    : `# 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `# 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
@@ -1025,7 +1046,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
-                    : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `// 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
@@ -1143,7 +1164,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
-                    : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `// 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
@@ -1277,7 +1298,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                 <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
-                    : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
+                    : `// 滑鼠懸停上方單字查看釋義 (Hover to Inspect)`}
                 </span>
               </div>
 
