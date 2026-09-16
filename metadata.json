@@ -1,0 +1,8 @@
+{
+  "name": "GRE App",
+  "description": "高度還原 VSCode 編輯器界面的程式碼風單字學習工具，單字巧妙融入真實程式碼，支援長按預覽中文釋義、快捷鍵排程與終端機控制。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
