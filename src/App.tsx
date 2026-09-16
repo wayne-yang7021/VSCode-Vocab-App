@@ -21,7 +21,9 @@ import { AlertTriangle } from 'lucide-react';
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('flashcards');
   const [activeActivityTab, setActiveActivityTab] = useState<ActivityTab>('explorer');
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
   const [terminalVisible, setTerminalVisible] = useState(true);
   const [stealthMode, setStealthMode] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);

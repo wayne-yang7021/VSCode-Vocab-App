@@ -130,6 +130,58 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
     };
   }, [currentWord, onLearning, onMastered, onNextCard, onPrevCard]);
 
+  // Tooltip viewport positioning calculation so it never overflows screen edges
+  const [popupPos, setPopupPos] = useState<{
+    offsetLeft: number;
+    placement: 'top' | 'bottom';
+    width: number;
+  }>({ offsetLeft: 0, placement: 'top', width: 380 });
+
+  useEffect(() => {
+    const updatePosition = () => {
+      if (!showDefinition || !wordRef.current) return;
+      const rect = wordRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      
+      // Responsive width: max 390px, but capped to viewportWidth - 24px
+      const targetWidth = Math.min(390, Math.max(280, viewportWidth - 24));
+      
+      // Ideal position: start from word left, but clamped between 12px and (viewportWidth - targetWidth - 12px)
+      let idealLeft = rect.left;
+      const maxLeft = viewportWidth - targetWidth - 12;
+      const minLeft = 12;
+
+      if (idealLeft > maxLeft) {
+        idealLeft = maxLeft;
+      }
+      if (idealLeft < minLeft) {
+        idealLeft = minLeft;
+      }
+
+      // offsetLeft relative to wordRef (which has position: relative)
+      const offsetLeft = idealLeft - rect.left;
+      
+      // Vertical placement: if less than 240px space above, place below
+      const placement = rect.top < 240 ? 'bottom' : 'top';
+      
+      setPopupPos({
+        offsetLeft,
+        placement,
+        width: targetWidth,
+      });
+    };
+
+    if (showDefinition) {
+      updatePosition();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
+      return () => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      };
+    }
+  }, [showDefinition, currentWord?.id]);
+
   // If there are no words in queue or queue is empty
   if (!currentWord || totalInQueue === 0) {
     return (
@@ -186,44 +238,44 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
   // Render unified CodeLens Action Row
   const renderCodeLens = () => (
-    <div className="pl-6 pt-1 text-[11px] text-[#858585] flex items-center gap-3 select-none">
+    <div className="pl-6 pt-1 text-[11px] text-[#858585] flex items-center gap-2 sm:gap-3 select-none whitespace-nowrap">
       <span
-        className="hover:text-[#4ec9b0] cursor-pointer flex items-center gap-1"
+        className="hover:text-[#4ec9b0] cursor-pointer flex items-center gap-1 shrink-0"
         onClick={() => speakWord(currentWord.word)}
         title="發音 (Key V)"
       >
         <Volume2 className="w-3 h-3 text-[#4ec9b0]" />
         <span>Audio (V)</span>
       </span>
-      <span>|</span>
+      <span className="text-[#444444]">|</span>
       <span
-        className="hover:text-[#89d185] cursor-pointer flex items-center gap-1 text-[#89d185]"
+        className="hover:text-[#89d185] cursor-pointer flex items-center gap-1 text-[#89d185] shrink-0"
         onClick={onMastered}
         title="標記已掌握 (Key 2 或 ↑)"
       >
         <Check className="w-3 h-3" />
         <span>Mark Mastered (2)</span>
       </span>
-      <span>|</span>
+      <span className="text-[#444444]">|</span>
       <span
-        className="hover:text-[#f48771] cursor-pointer flex items-center gap-1 text-[#f48771]"
+        className="hover:text-[#f48771] cursor-pointer flex items-center gap-1 text-[#f48771] shrink-0"
         onClick={onLearning}
         title="標記還在學 (Key 1 或 ↓)"
       >
         <X className="w-3 h-3" />
         <span>Still Learning (1)</span>
       </span>
-      <span>|</span>
+      <span className="text-[#444444]">|</span>
       <span
         onMouseDown={() => setIsHoldingPeek(true)}
         onMouseUp={() => setIsHoldingPeek(false)}
         onTouchStart={() => setIsHoldingPeek(true)}
         onTouchEnd={() => setIsHoldingPeek(false)}
-        className="hover:text-[#dcdcaa] cursor-pointer flex items-center gap-1 text-[#cca700]"
+        className="hover:text-[#dcdcaa] cursor-pointer flex items-center gap-1 text-[#cca700] shrink-0"
         title="按住滑鼠或空白鍵即可查看中文釋義"
       >
         <Eye className="w-3 h-3" />
-        <span>按住預覽釋義 (Hold Space / Mouse)</span>
+        <span>預覽釋義 (Space/Mouse)</span>
       </span>
     </div>
   );
@@ -238,7 +290,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
         onMouseLeave={() => !isPinned && setIsHoldingPeek(false)}
         onTouchStart={() => setIsHoldingPeek(true)}
         onTouchEnd={() => setIsHoldingPeek(false)}
-        className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-150 border inline-block ${
+        className={`px-2 py-0.5 rounded cursor-pointer transition-all duration-150 border inline-block select-none ${
           showDefinition
             ? 'bg-[#04395e] border-[#007acc] text-white shadow-lg shadow-[#007acc]/20 scale-[1.02]'
             : 'bg-[#2d2d2d] hover:bg-[#383838] border-[#444444] text-[#ce9178] hover:border-[#007acc]/60'
@@ -256,16 +308,23 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
         )}
       </span>
 
-      {/* VS CODE HOVER INSPECTION TOOLTIP (Rich hover definition) */}
+      {/* VS CODE HOVER INSPECTION TOOLTIP (Rich hover definition clamped within viewport) */}
       {showDefinition && (
         <div
-          className="absolute left-0 bottom-full mb-2 z-40 w-[420px] max-w-[85vw] bg-[#252526] border border-[#454545] rounded shadow-2xl p-3 text-xs text-[#cccccc] font-mono-code animate-fadeIn"
+          style={{
+            left: `${popupPos.offsetLeft}px`,
+            width: `${popupPos.width}px`,
+            maxWidth: 'calc(100vw - 24px)',
+          }}
+          className={`absolute z-50 bg-[#252526] border border-[#454545] rounded shadow-2xl p-3 text-xs text-[#cccccc] font-mono-code animate-fadeIn max-h-[85vh] overflow-y-auto ${
+            popupPos.placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Tooltip Header */}
           <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-[#333333]">
-            <div className="flex items-center gap-2">
-              <span className="text-[#858585] text-[10px]">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className="text-[#858585] text-[10px] shrink-0">
                 {languageMode === 'java'
                   ? '(field)'
                   : languageMode === 'python'
@@ -276,11 +335,11 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
                   ? '(constant)'
                   : '(property)'}
               </span>
-              <span className="text-[#9cdcfe] font-semibold">
+              <span className="text-[#9cdcfe] font-semibold truncate">
                 {langInfo.className}.{currentWord.word}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
               <button
                 onClick={() => setIsPinned((p) => !p)}
                 title={isPinned ? '取消釘選' : '釘選此資訊視窗 (Key T)'}
@@ -303,7 +362,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
             </span>
             <button
               onClick={() => speakWord(currentWord.word)}
-              className="ml-auto px-2 py-0.5 bg-[#2d2d2d] hover:bg-[#383838] text-[#4ec9b0] rounded flex items-center gap-1 text-[11px] cursor-pointer"
+              className="ml-auto px-2 py-0.5 bg-[#2d2d2d] hover:bg-[#383838] text-[#4ec9b0] rounded flex items-center gap-1 text-[11px] cursor-pointer whitespace-nowrap shrink-0"
             >
               <Volume2 className="w-3 h-3" />
               <span>發音 (V)</span>
@@ -315,7 +374,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
             <div className="text-[10px] text-[#6a9955] font-semibold mb-0.5">
               // 中文釋義 (Chinese Definition)
             </div>
-            <div className="text-[#dcdcaa] font-semibold text-[13px] leading-snug">
+            <div className="text-[#dcdcaa] font-semibold text-[13px] leading-snug break-words">
               {currentWord.paraphrase_pos}
             </div>
           </div>
@@ -326,7 +385,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               <div className="text-[10px] text-[#6a9955] font-semibold mb-0.5">
                 // 英文釋義 (English Meaning)
               </div>
-              <div className="text-[#9cdcfe] text-[11px] leading-relaxed">
+              <div className="text-[#9cdcfe] text-[11px] leading-relaxed break-words">
                 {currentWord.paraphrase_english}
               </div>
             </div>
@@ -334,22 +393,22 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
           {/* Quick Mastery Buttons inside Tooltip */}
           <div className="pt-2 border-t border-[#333333] flex items-center justify-between gap-2">
-            <div className="text-[10px] text-[#858585]">
-              放開滑鼠即可還原為程式碼
+            <div className="text-[10px] text-[#858585] truncate">
+              放開即可還原為程式碼
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={onLearning}
-                className="px-2.5 py-1 bg-[#3a1d1d] hover:bg-[#522323] text-[#f48771] border border-[#6b2525] rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                className="px-2 sm:px-2.5 py-1 bg-[#3a1d1d] hover:bg-[#522323] text-[#f48771] border border-[#6b2525] rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3 h-3 shrink-0" />
                 <span>還不會 [1]</span>
               </button>
               <button
                 onClick={onMastered}
-                className="px-2.5 py-1 bg-[#1e3a1e] hover:bg-[#285028] text-[#89d185] border border-[#3e6b3e] rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                className="px-2 sm:px-2.5 py-1 bg-[#1e3a1e] hover:bg-[#285028] text-[#89d185] border border-[#3e6b3e] rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Check className="w-3 h-3" />
+                <Check className="w-3 h-3 shrink-0" />
                 <span>我會了 [2]</span>
               </button>
             </div>
@@ -426,14 +485,15 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
         </div>
 
         {/* Code Canvas Area */}
-        <div className="flex-1 pt-3 pb-8 pl-4 pr-12 text-[13px] leading-6 font-mono-code text-[#d4d4d4] overflow-x-auto relative">
+        <div className="flex-1 pt-3 pb-8 pl-4 pr-12 text-[13px] leading-6 font-mono-code text-[#d4d4d4] overflow-x-auto relative min-w-0">
           {/* Active Line Highlight Background */}
           <div
             className="absolute left-0 right-0 h-6 bg-[#282828]/70 pointer-events-none"
             style={{ top: `${12 * 24 + 12}px` }}
           />
 
-          {/* 1. TYPESCRIPT SYNTAX */}
+          <div className="min-w-max">
+            {/* 1. TYPESCRIPT SYNTAX */}
           {languageMode === 'typescript' && (
             <div>
               <div>
@@ -492,7 +552,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE */}
-              <div className="pl-6 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-6 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#569cd6]">public readonly</span>{' '}
                 <span className="text-[#9cdcfe]">targetToken</span>{' '}
                 <span className="text-[#d4d4d4]">=</span>{' '}
@@ -501,7 +561,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
                 <span className="text-[#d4d4d4]">;</span>
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
                     : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -663,7 +723,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE IN JAVA */}
-              <div className="pl-6 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-6 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#569cd6]">public static final</span>{' '}
                 <span className="text-[#4ec9b0]">String</span>{' '}
                 <span className="text-[#9cdcfe]">TARGET_TOKEN</span>{' '}
@@ -673,7 +733,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
                 <span className="text-[#d4d4d4]">;</span>
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
                     : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -821,7 +881,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE IN PYTHON */}
-              <div className="pl-6 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-6 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#9cdcfe]">target_token</span>
                 <span className="text-[#d4d4d4]">:</span>{' '}
                 <span className="text-[#4ec9b0]">Final[str]</span>{' '}
@@ -829,7 +889,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
                 {renderInteractiveWordToken()}
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `# 【釋義】${currentWord.paraphrase_pos}`
                     : `# 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -952,7 +1012,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE IN C++ */}
-              <div className="pl-8 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-8 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#569cd6]">static constexpr</span>{' '}
                 <span className="text-[#4ec9b0]">std::string_view</span>{' '}
                 <span className="text-[#9cdcfe]">TARGET_TOKEN</span>{' '}
@@ -962,7 +1022,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
                 <span className="text-[#d4d4d4]">;</span>
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
                     : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -1073,14 +1133,14 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE IN GO */}
-              <div className="pl-4 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-4 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#569cd6]">var</span>{' '}
                 <span className="text-[#9cdcfe]">TargetToken</span>{' '}
                 <span className="text-[#d4d4d4]">=</span>{' '}
 
                 {renderInteractiveWordToken()}
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
                     : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -1203,7 +1263,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               {renderCodeLens()}
 
               {/* LINE 13: THE TARGET WORD LINE IN RUST */}
-              <div className="pl-6 py-0.5 flex items-center gap-2 relative">
+              <div className="pl-6 py-0.5 flex items-center gap-2 relative whitespace-nowrap">
                 <span className="text-[#569cd6]">pub const</span>{' '}
                 <span className="text-[#9cdcfe]">TARGET_TOKEN</span>
                 <span className="text-[#d4d4d4]">:</span>{' '}
@@ -1214,7 +1274,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
 
                 <span className="text-[#d4d4d4]">;</span>
 
-                <span className="text-[#6a9955] text-xs ml-2 truncate">
+                <span className="text-[#6a9955] text-xs ml-2">
                   {showDefinition
                     ? `// 【釋義】${currentWord.paraphrase_pos}`
                     : `// 點擊並按住上方單字查看釋義 (Hold Space / Mouse)`}
@@ -1295,6 +1355,7 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Simulated VS Code Minimap on the right */}
@@ -1315,57 +1376,62 @@ export const VSCodeCodeEditor: React.FC<VSCodeCodeEditorProps> = ({
       </div>
 
       {/* Editor Floating Bottom Navigation Strip */}
-      <div className="h-10 px-4 bg-[#252526] border-t border-[#2b2b2b] flex items-center justify-between text-xs text-[#cccccc] shrink-0 z-10 select-none">
-        <div className="flex items-center gap-2">
+      <div className="h-10 min-h-10 max-h-10 px-2 sm:px-4 bg-[#252526] border-t border-[#2b2b2b] flex items-center justify-between text-xs text-[#cccccc] shrink-0 z-10 select-none overflow-x-auto overflow-y-hidden gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Prev / Next buttons */}
           <button
             onClick={onPrevCard}
             disabled={!onPrevCard || currentIndex <= 0}
-            className="px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] disabled:opacity-40 disabled:pointer-events-none text-[#cccccc] flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-2 sm:px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] disabled:opacity-40 disabled:pointer-events-none text-[#cccccc] flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0"
             title="Previous Word (Left Arrow)"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Prev (←)</span>
+            <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-xs">Prev</span>
+            <span className="hidden lg:inline text-[10px] text-[#888888]">(←)</span>
           </button>
 
           <button
             onClick={onNextCard}
             disabled={!onNextCard || currentIndex >= totalInQueue - 1}
-            className="px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] disabled:opacity-40 disabled:pointer-events-none text-[#cccccc] flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-2 sm:px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] disabled:opacity-40 disabled:pointer-events-none text-[#cccccc] flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0"
             title="Next Word (Right Arrow)"
           >
-            <span className="hidden sm:inline">Next (→)</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <span className="text-xs">Next</span>
+            <span className="hidden lg:inline text-[10px] text-[#888888]">(→)</span>
+            <ChevronRight className="w-3.5 h-3.5 shrink-0" />
           </button>
 
           <button
             onClick={() => speakWord(currentWord.word)}
-            className="px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] text-[#4ec9b0] flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-2 sm:px-2.5 py-1 rounded bg-[#2d2d2d] hover:bg-[#383838] text-[#4ec9b0] flex items-center gap-1 cursor-pointer transition-colors whitespace-nowrap shrink-0"
             title="Play Pronunciation (Key V)"
           >
-            <Volume2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">發音 (V)</span>
+            <Volume2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden xs:inline text-xs">發音</span>
+            <span className="hidden lg:inline text-[10px] text-[#888888]">(V)</span>
           </button>
         </div>
 
         {/* Primary Action Buttons (Still Learning vs Mastered) */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={onLearning}
-            className="px-3 py-1 bg-[#3a1d1d] hover:bg-[#522323] text-[#f48771] border border-[#6b2525] rounded font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="px-2.5 sm:px-3 py-1 bg-[#3a1d1d] hover:bg-[#522323] text-[#f48771] border border-[#6b2525] rounded font-semibold text-xs flex items-center gap-1 sm:gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
             title="Mark as Still Learning (Key 1 or Down Arrow)"
           >
-            <X className="w-3.5 h-3.5" />
-            <span>我還不會 (Key 1)</span>
+            <X className="w-3.5 h-3.5 shrink-0" />
+            <span>我還不會</span>
+            <span className="hidden md:inline text-[11px] opacity-80">(Key 1)</span>
           </button>
 
           <button
             onClick={onMastered}
-            className="px-3.5 py-1 bg-[#1e3a1e] hover:bg-[#285028] text-[#89d185] border border-[#3e6b3e] rounded font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+            className="px-2.5 sm:px-3.5 py-1 bg-[#1e3a1e] hover:bg-[#285028] text-[#89d185] border border-[#3e6b3e] rounded font-semibold text-xs flex items-center gap-1 sm:gap-1.5 cursor-pointer transition-colors shadow-sm whitespace-nowrap shrink-0"
             title="Mark as Mastered (Key 2 or Up Arrow)"
           >
-            <Check className="w-3.5 h-3.5" />
-            <span>我會了 (Key 2)</span>
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            <span>我會了</span>
+            <span className="hidden md:inline text-[11px] opacity-80">(Key 2)</span>
           </button>
         </div>
       </div>
